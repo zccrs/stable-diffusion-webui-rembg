@@ -240,7 +240,8 @@ class GeekyRemB:
                       color_tolerance, background_mode, background_color, output_format="RGBA",
                       invert_mask=False, feather_amount=0, edge_detection=False,
                       edge_thickness=1, edge_color="#FFFFFF", shadow=False, shadow_blur=5,
-                      shadow_opacity=0.5, color_adjustment=False, brightness=1.0, contrast=1.0,
+                      shadow_opacity=0.5, shadow_x_offset=5, shadow_y_offset=5,
+                      color_adjustment=False, brightness=1.0, contrast=1.0,
                       saturation=1.0, x_position=0, y_position=0, rotation=0, opacity=1.0,
                       flip_horizontal=False, flip_vertical=False, mask_blur=0, mask_expansion=0,
                       foreground_scale=1.0, foreground_aspect_ratio=None, remove_bg=True,
@@ -362,6 +363,17 @@ class GeekyRemB:
         if fg_mask_with_opacity.size != fg_with_opacity.size:
             fg_mask_with_opacity = fg_mask_with_opacity.resize(fg_with_opacity.size, Image.LANCZOS)
 
+        if shadow:
+            shadow_mask = fg_mask.filter(ImageFilter.GaussianBlur(shadow_blur))
+            shadow_image = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
+            # 应用阴影偏移
+            shadow_x = x_position + shadow_x_offset + (output_width - fg_image.width) // 2
+            shadow_y = y_position + shadow_y_offset + (output_height - fg_image.height) // 2
+            shadow_image.paste((0, 0, 0, int(255 * shadow_opacity)), (shadow_x, shadow_y), shadow_mask)
+            # 先添加阴影，再添加主图像
+            result = Image.alpha_composite(result, shadow_image.filter(ImageFilter.GaussianBlur(shadow_blur)))
+
+        # 添加主图像
         result.paste(fg_with_opacity, (paste_x, paste_y), fg_mask_with_opacity)
 
         if edge_detection:
@@ -370,12 +382,6 @@ class GeekyRemB:
             edge_overlay = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
             edge_overlay.paste(Image.new("RGB", fg_image.size, edge_color), (paste_x, paste_y), Image.fromarray(edge_mask))
             result = Image.alpha_composite(result, edge_overlay)
-
-        if shadow:
-            shadow_mask = fg_mask.filter(ImageFilter.GaussianBlur(shadow_blur))
-            shadow_image = Image.new("RGBA", (output_width, output_height), (0, 0, 0, 0))
-            shadow_image.paste((0, 0, 0, int(255 * shadow_opacity)), (paste_x, paste_y), shadow_mask)
-            result = Image.alpha_composite(result, shadow_image.filter(ImageFilter.GaussianBlur(shadow_blur)))
 
         if color_adjustment:
             enhancer = ImageEnhance.Brightness(result)
@@ -403,40 +409,41 @@ def on_ui():
     with gr.Blocks(analytics_enabled=False) as geeky_remb_tab:
         gr.Markdown("# GeekyRemB: 背景移除与图像处理")
 
-        with gr.Row():
-            with gr.Column(scale=1):
-                with gr.Group():
-                    gr.Markdown("### 前景调整")
+        with gr.Accordion("基本设置", open=True):
+            with gr.Row():
+                with gr.Column(scale=1):
                     with gr.Group():
-                        blend_mode = gr.Dropdown(
-                            label="混合模式",
-                            choices=["正常", "正片叠底", "滤色", "叠加", "柔光",
-                                    "强光", "差值", "排除", "颜色减淡", "颜色加深"],
-                            value="正常"
+                        gr.Markdown("### 前景调整")
+                        with gr.Group():
+                            blend_mode = gr.Dropdown(
+                                label="混合模式",
+                                choices=["正常", "正片叠底", "滤色", "叠加", "柔光",
+                                        "强光", "差值", "排除", "颜色减淡", "颜色加深"],
+                                value="正常"
+                            )
+                            opacity = gr.Slider(label="不透明度", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
+
+                        foreground_scale = gr.Slider(label="缩放", minimum=0.1, maximum=5.0, value=1.0, step=0.1)
+                        foreground_aspect_ratio = gr.Textbox(
+                            label="纵横比",
+                            placeholder="例如：16:9, 4:3, 1:1, portrait（纵向）, landscape（横向）或留空保持原始比例",
+                            value=""
                         )
-                        opacity = gr.Slider(label="不透明度", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
+                        x_position = gr.Slider(label="X 位置", minimum=-1000, maximum=1000, value=0, step=1)
+                        y_position = gr.Slider(label="Y 位置", minimum=-1000, maximum=1000, value=0, step=1)
+                        rotation = gr.Slider(label="旋转", minimum=-360, maximum=360, value=0, step=0.1)
 
-                    foreground_scale = gr.Slider(label="缩放", minimum=0.1, maximum=5.0, value=1.0, step=0.1)
-                    foreground_aspect_ratio = gr.Textbox(
-                        label="纵横比",
-                        placeholder="例如：16:9, 4:3, 1:1, portrait（纵向）, landscape（横向）或留空保持原始比例",
-                        value=""
-                    )
-                    x_position = gr.Slider(label="X 位置", minimum=-1000, maximum=1000, value=0, step=1)
-                    y_position = gr.Slider(label="Y 位置", minimum=-1000, maximum=1000, value=0, step=1)
-                    rotation = gr.Slider(label="旋转", minimum=-360, maximum=360, value=0, step=0.1)
+                        with gr.Row():
+                            flip_horizontal = gr.Checkbox(label="水平翻转", value=False)
+                            flip_vertical = gr.Checkbox(label="垂直翻转", value=False)
 
-                    with gr.Row():
-                        flip_horizontal = gr.Checkbox(label="水平翻转", value=False)
-                        flip_vertical = gr.Checkbox(label="垂直翻转", value=False)
-
-            with gr.Column(scale=1):
-                with gr.Group():
-                    gr.Markdown("### 背景选项")
-                    remove_background = gr.Checkbox(label="移除背景", value=True)
-                    background_mode = gr.Radio(label="背景模式", choices=["透明", "纯色", "图片"], value="透明")
-                    background_color = gr.ColorPicker(label="背景颜色", value="#000000", visible=False)
-                    background_image = gr.Image(label="背景图片", type="pil", visible=False)
+                with gr.Column(scale=1):
+                    with gr.Group():
+                        gr.Markdown("### 背景选项")
+                        remove_background = gr.Checkbox(label="移除背景", value=True)
+                        background_mode = gr.Radio(label="背景模式", choices=["透明", "纯色", "图片"], value="透明")
+                        background_color = gr.ColorPicker(label="背景颜色", value="#000000", visible=False)
+                        background_image = gr.Image(label="背景图片", type="pil", visible=False)
 
         with gr.Accordion("高级设置", open=False):
             with gr.Row():
@@ -444,33 +451,55 @@ def on_ui():
                     gr.Markdown("### 移除设置")
                     model = gr.Dropdown(label="模型", choices=["u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg", "silueta", "isnet-general-use", "isnet-anime"], value="u2net")
                     output_format = gr.Radio(label="输出格式", choices=["RGBA", "RGB"], value="RGBA")
-                    alpha_matting = gr.Checkbox(label="Alpha 抠图", value=False)
-                    alpha_matting_foreground_threshold = gr.Slider(label="Alpha 前景阈值", minimum=0, maximum=255, value=240, step=1)
-                    alpha_matting_background_threshold = gr.Slider(label="Alpha 背景阈值", minimum=0, maximum=255, value=10, step=1)
-                    post_process_mask = gr.Checkbox(label="后处理蒙版", value=False)
+                    with gr.Group():
+                        alpha_matting = gr.Checkbox(label="启用 Alpha 抠图", value=False)
+                        with gr.Group(visible=False) as alpha_matting_group:
+                            alpha_matting_foreground_threshold = gr.Slider(label="前景阈值", minimum=0, maximum=255, value=240, step=1)
+                            alpha_matting_background_threshold = gr.Slider(label="背景阈值", minimum=0, maximum=255, value=10, step=1)
+                            post_process_mask = gr.Checkbox(label="后处理蒙版", value=False)
 
                 with gr.Column():
                     gr.Markdown("### 色键设置")
-                    chroma_key = gr.Dropdown(label="色键", choices=["无", "绿色", "蓝色", "红色"], value="无")
-                    chroma_threshold = gr.Slider(label="色键阈值", minimum=0, maximum=255, value=30, step=1)
-                    color_tolerance = gr.Slider(label="颜色容差", minimum=0, maximum=255, value=20, step=1)
+                    with gr.Group():
+                        chroma_key = gr.Dropdown(label="色键", choices=["无", "绿色", "蓝色", "红色"], value="无")
+                        with gr.Group(visible=False) as chroma_group:
+                            chroma_threshold = gr.Slider(label="色键阈值", minimum=0, maximum=255, value=30, step=1)
+                            color_tolerance = gr.Slider(label="颜色容差", minimum=0, maximum=255, value=20, step=1)
+
+                    gr.Markdown("### 蒙版调整")
+                    with gr.Group():
+                        invert_mask = gr.Checkbox(label="反转蒙版", value=False)
+                        feather_amount = gr.Slider(label="羽化程度", minimum=0, maximum=100, value=0, step=1)
+                        mask_blur = gr.Slider(label="蒙版模糊", minimum=0, maximum=100, value=0, step=1)
+                        mask_expansion = gr.Slider(label="蒙版扩张", minimum=-100, maximum=100, value=0, step=1)
+
+            with gr.Row():
+                with gr.Column():
+                    gr.Markdown("### 边缘效果")
+                    with gr.Group():
+                        edge_detection = gr.Checkbox(label="启用边缘检测", value=False)
+                        with gr.Group(visible=False) as edge_group:
+                            edge_thickness = gr.Slider(label="边缘粗细", minimum=1, maximum=10, value=1, step=1)
+                            edge_color = gr.ColorPicker(label="边缘颜色", value="#FFFFFF", interactive=True)
 
                 with gr.Column():
-                    gr.Markdown("### 特效")
-                    invert_mask = gr.Checkbox(label="反转蒙版", value=False)
-                    feather_amount = gr.Slider(label="羽化程度", minimum=0, maximum=100, value=0, step=1)
-                    edge_detection = gr.Checkbox(label="边缘检测", value=False)
-                    edge_thickness = gr.Slider(label="边缘粗细", minimum=1, maximum=10, value=1, step=1)
-                    edge_color = gr.ColorPicker(label="边缘颜色", value="#FFFFFF")
-                    shadow = gr.Checkbox(label="阴影", value=False)
-                    shadow_blur = gr.Slider(label="阴影模糊", minimum=0, maximum=20, value=5, step=1)
-                    shadow_opacity = gr.Slider(label="阴影不透明度", minimum=0.0, maximum=1.0, value=0.5, step=0.1)
-                    color_adjustment = gr.Checkbox(label="颜色调整", value=False)
-                    brightness = gr.Slider(label="亮度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    contrast = gr.Slider(label="对比度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    saturation = gr.Slider(label="饱和度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    mask_blur = gr.Slider(label="蒙版模糊", minimum=0, maximum=100, value=0, step=1)
-                    mask_expansion = gr.Slider(label="蒙版扩张", minimum=-100, maximum=100, value=0, step=1)
+                    gr.Markdown("### 投影效果")
+                    with gr.Group():
+                        shadow = gr.Checkbox(label="启用投影", value=False)
+                        with gr.Group(visible=False) as shadow_group:
+                            shadow_blur = gr.Slider(label="投影模糊", minimum=0, maximum=20, value=5, step=1)
+                            shadow_opacity = gr.Slider(label="不透明度", minimum=0.0, maximum=1.0, value=0.5, step=0.1)
+                            shadow_x = gr.Slider(label="X 偏移", minimum=-100, maximum=100, value=5, step=1)
+                            shadow_y = gr.Slider(label="Y 偏移", minimum=-100, maximum=100, value=5, step=1)
+
+                with gr.Column():
+                    gr.Markdown("### 颜色调整")
+                    with gr.Group():
+                        color_adjustment = gr.Checkbox(label="启用颜色调整", value=False)
+                        with gr.Group(visible=False) as color_group:
+                            brightness = gr.Slider(label="亮度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
+                            contrast = gr.Slider(label="对比度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
+                            saturation = gr.Slider(label="饱和度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
 
             with gr.Row():
                 gr.Markdown("### 输出设置")
@@ -484,19 +513,14 @@ def on_ui():
                     visible=True
                 )
 
-                # 更新背景模式处理函数
-                def update_background_mode(mode):
-                    return {
-                        background_color: gr.update(visible=mode == "纯色"),
-                        background_image: gr.update(visible=mode == "图片")
-                    }
-
+        # 更新背景模式UI
         def update_background_mode(mode):
             return {
-                background_color: gr.update(visible=mode == "color"),
-                background_image: gr.update(visible=mode == "image")
+                background_color: gr.update(visible=mode == "纯色"),
+                background_image: gr.update(visible=mode == "图片")
             }
 
+        # 更新自定义尺寸UI
         def update_custom_dimensions(use_custom):
             return {
                 custom_width: gr.update(visible=use_custom),
@@ -504,17 +528,73 @@ def on_ui():
                 output_dimension_source: gr.update(visible=not use_custom)
             }
 
+        # 更新 Alpha 抠图组件状态
+        def update_alpha_matting(enabled):
+            return {
+                alpha_matting_group: gr.update(visible=enabled),
+                alpha_matting_foreground_threshold: gr.update(interactive=enabled),
+                alpha_matting_background_threshold: gr.update(interactive=enabled),
+                post_process_mask: gr.update(interactive=enabled)
+            }
+
+        # 更新色键组件状态
+        def update_chroma_key(value):
+            enabled = value != "无"
+            return {
+                chroma_group: gr.update(visible=enabled),
+                chroma_threshold: gr.update(interactive=enabled),
+                color_tolerance: gr.update(interactive=enabled)
+            }
+
+        # 更新边缘检测组件状态
+        def update_edge_detection(enabled):
+            return {
+                edge_group: gr.update(visible=enabled),
+                edge_thickness: gr.update(interactive=enabled)
+            }
+
+        # 更新投影组件状态
+        def update_shadow(enabled):
+            return {
+                shadow_group: gr.update(visible=enabled),
+                shadow_blur: gr.update(interactive=enabled),
+                shadow_opacity: gr.update(interactive=enabled),
+                shadow_x: gr.update(interactive=enabled),
+                shadow_y: gr.update(interactive=enabled)
+            }
+
+        # 更新颜色调整组件状态
+        def update_color_adjustment(enabled):
+            return {
+                color_group: gr.update(visible=enabled),
+                brightness: gr.update(interactive=enabled),
+                contrast: gr.update(interactive=enabled),
+                saturation: gr.update(interactive=enabled)
+            }
+
+        # 绑定UI事件
         background_mode.change(update_background_mode, inputs=[background_mode],
                              outputs=[background_color, background_image])
         use_custom_dimensions.change(update_custom_dimensions, inputs=[use_custom_dimensions],
                                    outputs=[custom_width, custom_height, output_dimension_source])
+        alpha_matting.change(update_alpha_matting, inputs=[alpha_matting],
+                           outputs=[alpha_matting_group, alpha_matting_foreground_threshold,
+                                  alpha_matting_background_threshold, post_process_mask])
+        chroma_key.change(update_chroma_key, inputs=[chroma_key],
+                         outputs=[chroma_group, chroma_threshold, color_tolerance])
+        edge_detection.change(update_edge_detection, inputs=[edge_detection],
+                            outputs=[edge_group, edge_thickness])
+        shadow.change(update_shadow, inputs=[shadow],
+                     outputs=[shadow_group, shadow_blur, shadow_opacity, shadow_x, shadow_y])
+        color_adjustment.change(update_color_adjustment, inputs=[color_adjustment],
+                              outputs=[color_group, brightness, contrast, saturation])
 
         return [model, output_format, alpha_matting, alpha_matting_foreground_threshold,
                 alpha_matting_background_threshold, post_process_mask, chroma_key,
                 chroma_threshold, color_tolerance, background_mode, background_color,
                 background_image, invert_mask, feather_amount,
                 edge_detection, edge_thickness, edge_color, shadow, shadow_blur,
-                shadow_opacity, color_adjustment, brightness, contrast, saturation,
+                shadow_opacity, shadow_x, shadow_y, color_adjustment, brightness, contrast, saturation,
                 x_position, y_position, rotation, opacity, flip_horizontal,
                 flip_vertical, mask_blur, mask_expansion, foreground_scale,
                 foreground_aspect_ratio, remove_background,
@@ -536,7 +616,7 @@ class Script(scripts.Script):
             chroma_threshold, color_tolerance, background_mode, background_color,
             background_image, invert_mask, feather_amount,
             edge_detection, edge_thickness, edge_color, shadow, shadow_blur,
-            shadow_opacity, color_adjustment, brightness, contrast, saturation,
+            shadow_opacity, shadow_x, shadow_y, color_adjustment, brightness, contrast, saturation,
             x_position, y_position, rotation, opacity, flip_horizontal,
             flip_vertical, mask_blur, mask_expansion, foreground_scale,
             foreground_aspect_ratio, remove_background,
@@ -566,8 +646,8 @@ class Script(scripts.Script):
                chroma_threshold, color_tolerance, background_mode, background_color,
                output_format, invert_mask, feather_amount, edge_detection,
                edge_thickness, edge_color, shadow, shadow_blur, shadow_opacity,
-               color_adjustment, brightness, contrast, saturation, x_position,
-               y_position, rotation, opacity, flip_horizontal, flip_vertical,
+               shadow_x, shadow_y, color_adjustment, brightness, contrast, saturation,
+               x_position, y_position, rotation, opacity, flip_horizontal, flip_vertical,
                mask_blur, mask_expansion, foreground_scale, foreground_aspect_ratio,
                remove_background, use_custom_dimensions, custom_width, custom_height,
                output_dimension_source, blend_mode)
