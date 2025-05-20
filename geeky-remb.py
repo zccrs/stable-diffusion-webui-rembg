@@ -110,6 +110,29 @@ class GeekyRemB:
         if "U2NET_HOME" not in os.environ:
             os.environ["U2NET_HOME"] = os.path.join(models_path, "u2net")
         self.use_gpu = torch.cuda.is_available()
+        self.blend_mode_map = {
+            "正常": "normal",
+            "正片叠底": "multiply",
+            "滤色": "screen",
+            "叠加": "overlay",
+            "柔光": "soft_light",
+            "强光": "hard_light",
+            "差值": "difference",
+            "排除": "exclusion",
+            "颜色减淡": "color_dodge",
+            "颜色加深": "color_burn"
+        }
+        self.background_mode_map = {
+            "透明": "transparent",
+            "纯色": "color",
+            "图片": "image"
+        }
+        self.chroma_key_map = {
+            "无": "none",
+            "绿色": "green",
+            "蓝色": "blue",
+            "红色": "red"
+        }
         self.blend_modes = {
             "normal": BlendMode.normal,
             "multiply": BlendMode.multiply,
@@ -378,88 +401,95 @@ class GeekyRemB:
 
 def on_ui():
     with gr.Blocks(analytics_enabled=False) as geeky_remb_tab:
-        gr.Markdown("# GeekyRemB: Background Removal and Image Manipulation")
+        gr.Markdown("# GeekyRemB: 背景移除与图像处理")
 
         with gr.Row():
             with gr.Column(scale=1):
                 with gr.Group():
-                    gr.Markdown("### Foreground Adjustments")
+                    gr.Markdown("### 前景调整")
                     with gr.Group():
                         blend_mode = gr.Dropdown(
-                            label="Blend Mode",
-                            choices=["normal", "multiply", "screen", "overlay", "soft_light",
-                                    "hard_light", "difference", "exclusion", "color_dodge", "color_burn"],
-                            value="normal"
+                            label="混合模式",
+                            choices=["正常", "正片叠底", "滤色", "叠加", "柔光",
+                                    "强光", "差值", "排除", "颜色减淡", "颜色加深"],
+                            value="正常"
                         )
-                        opacity = gr.Slider(label="Opacity", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
+                        opacity = gr.Slider(label="不透明度", minimum=0.0, maximum=1.0, value=1.0, step=0.01)
 
-                    foreground_scale = gr.Slider(label="Scale", minimum=0.1, maximum=5.0, value=1.0, step=0.1)
+                    foreground_scale = gr.Slider(label="缩放", minimum=0.1, maximum=5.0, value=1.0, step=0.1)
                     foreground_aspect_ratio = gr.Textbox(
-                        label="Aspect Ratio",
-                        placeholder="e.g., 16:9, 4:3, 1:1, portrait, landscape, or leave blank for original",
+                        label="纵横比",
+                        placeholder="例如：16:9, 4:3, 1:1, portrait（纵向）, landscape（横向）或留空保持原始比例",
                         value=""
                     )
-                    x_position = gr.Slider(label="X Position", minimum=-1000, maximum=1000, value=0, step=1)
-                    y_position = gr.Slider(label="Y Position", minimum=-1000, maximum=1000, value=0, step=1)
-                    rotation = gr.Slider(label="Rotation", minimum=-360, maximum=360, value=0, step=0.1)
+                    x_position = gr.Slider(label="X 位置", minimum=-1000, maximum=1000, value=0, step=1)
+                    y_position = gr.Slider(label="Y 位置", minimum=-1000, maximum=1000, value=0, step=1)
+                    rotation = gr.Slider(label="旋转", minimum=-360, maximum=360, value=0, step=0.1)
 
                     with gr.Row():
-                        flip_horizontal = gr.Checkbox(label="Flip Horizontal", value=False)
-                        flip_vertical = gr.Checkbox(label="Flip Vertical", value=False)
+                        flip_horizontal = gr.Checkbox(label="水平翻转", value=False)
+                        flip_vertical = gr.Checkbox(label="垂直翻转", value=False)
 
             with gr.Column(scale=1):
                 with gr.Group():
-                    gr.Markdown("### Background Options")
-                    remove_background = gr.Checkbox(label="Remove Background", value=True)
-                    background_mode = gr.Radio(label="Background Mode", choices=["transparent", "color", "image"], value="transparent")
-                    background_color = gr.ColorPicker(label="Background Color", value="#000000", visible=False)
-                    background_image = gr.Image(label="Background Image", type="pil", visible=False)
+                    gr.Markdown("### 背景选项")
+                    remove_background = gr.Checkbox(label="移除背景", value=True)
+                    background_mode = gr.Radio(label="背景模式", choices=["透明", "纯色", "图片"], value="透明")
+                    background_color = gr.ColorPicker(label="背景颜色", value="#000000", visible=False)
+                    background_image = gr.Image(label="背景图片", type="pil", visible=False)
 
-        with gr.Accordion("Advanced Settings", open=False):
+        with gr.Accordion("高级设置", open=False):
             with gr.Row():
                 with gr.Column():
-                    gr.Markdown("### Removal Settings")
-                    model = gr.Dropdown(label="Model", choices=["u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg", "silueta", "isnet-general-use", "isnet-anime"], value="u2net")
-                    output_format = gr.Radio(label="Output Format", choices=["RGBA", "RGB"], value="RGBA")
-                    alpha_matting = gr.Checkbox(label="Alpha Matting", value=False)
-                    alpha_matting_foreground_threshold = gr.Slider(label="Alpha Matting Foreground Threshold", minimum=0, maximum=255, value=240, step=1)
-                    alpha_matting_background_threshold = gr.Slider(label="Alpha Matting Background Threshold", minimum=0, maximum=255, value=10, step=1)
-                    post_process_mask = gr.Checkbox(label="Post Process Mask", value=False)
+                    gr.Markdown("### 移除设置")
+                    model = gr.Dropdown(label="模型", choices=["u2net", "u2netp", "u2net_human_seg", "u2net_cloth_seg", "silueta", "isnet-general-use", "isnet-anime"], value="u2net")
+                    output_format = gr.Radio(label="输出格式", choices=["RGBA", "RGB"], value="RGBA")
+                    alpha_matting = gr.Checkbox(label="Alpha 抠图", value=False)
+                    alpha_matting_foreground_threshold = gr.Slider(label="Alpha 前景阈值", minimum=0, maximum=255, value=240, step=1)
+                    alpha_matting_background_threshold = gr.Slider(label="Alpha 背景阈值", minimum=0, maximum=255, value=10, step=1)
+                    post_process_mask = gr.Checkbox(label="后处理蒙版", value=False)
 
                 with gr.Column():
-                    gr.Markdown("### Chroma Key Settings")
-                    chroma_key = gr.Dropdown(label="Chroma Key", choices=["none", "green", "blue", "red"], value="none")
-                    chroma_threshold = gr.Slider(label="Chroma Threshold", minimum=0, maximum=255, value=30, step=1)
-                    color_tolerance = gr.Slider(label="Color Tolerance", minimum=0, maximum=255, value=20, step=1)
+                    gr.Markdown("### 色键设置")
+                    chroma_key = gr.Dropdown(label="色键", choices=["无", "绿色", "蓝色", "红色"], value="无")
+                    chroma_threshold = gr.Slider(label="色键阈值", minimum=0, maximum=255, value=30, step=1)
+                    color_tolerance = gr.Slider(label="颜色容差", minimum=0, maximum=255, value=20, step=1)
 
                 with gr.Column():
-                    gr.Markdown("### Effects")
-                    invert_mask = gr.Checkbox(label="Invert Mask", value=False)
-                    feather_amount = gr.Slider(label="Feather Amount", minimum=0, maximum=100, value=0, step=1)
-                    edge_detection = gr.Checkbox(label="Edge Detection", value=False)
-                    edge_thickness = gr.Slider(label="Edge Thickness", minimum=1, maximum=10, value=1, step=1)
-                    edge_color = gr.ColorPicker(label="Edge Color", value="#FFFFFF")
-                    shadow = gr.Checkbox(label="Shadow", value=False)
-                    shadow_blur = gr.Slider(label="Shadow Blur", minimum=0, maximum=20, value=5, step=1)
-                    shadow_opacity = gr.Slider(label="Shadow Opacity", minimum=0.0, maximum=1.0, value=0.5, step=0.1)
-                    color_adjustment = gr.Checkbox(label="Color Adjustment", value=False)
-                    brightness = gr.Slider(label="Brightness", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    contrast = gr.Slider(label="Contrast", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    saturation = gr.Slider(label="Saturation", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
-                    mask_blur = gr.Slider(label="Mask Blur", minimum=0, maximum=100, value=0, step=1)
-                    mask_expansion = gr.Slider(label="Mask Expansion", minimum=-100, maximum=100, value=0, step=1)
+                    gr.Markdown("### 特效")
+                    invert_mask = gr.Checkbox(label="反转蒙版", value=False)
+                    feather_amount = gr.Slider(label="羽化程度", minimum=0, maximum=100, value=0, step=1)
+                    edge_detection = gr.Checkbox(label="边缘检测", value=False)
+                    edge_thickness = gr.Slider(label="边缘粗细", minimum=1, maximum=10, value=1, step=1)
+                    edge_color = gr.ColorPicker(label="边缘颜色", value="#FFFFFF")
+                    shadow = gr.Checkbox(label="阴影", value=False)
+                    shadow_blur = gr.Slider(label="阴影模糊", minimum=0, maximum=20, value=5, step=1)
+                    shadow_opacity = gr.Slider(label="阴影不透明度", minimum=0.0, maximum=1.0, value=0.5, step=0.1)
+                    color_adjustment = gr.Checkbox(label="颜色调整", value=False)
+                    brightness = gr.Slider(label="亮度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
+                    contrast = gr.Slider(label="对比度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
+                    saturation = gr.Slider(label="饱和度", minimum=0.0, maximum=2.0, value=1.0, step=0.1)
+                    mask_blur = gr.Slider(label="蒙版模糊", minimum=0, maximum=100, value=0, step=1)
+                    mask_expansion = gr.Slider(label="蒙版扩张", minimum=-100, maximum=100, value=0, step=1)
 
             with gr.Row():
-                gr.Markdown("### Output Settings")
-                use_custom_dimensions = gr.Checkbox(label="Use Custom Dimensions", value=False)
-                custom_width = gr.Number(label="Custom Width", value=512, visible=False)
-                custom_height = gr.Number(label="Custom Height", value=512, visible=False)
+                gr.Markdown("### 输出设置")
+                use_custom_dimensions = gr.Checkbox(label="使用自定义尺寸", value=False)
+                custom_width = gr.Number(label="自定义宽度", value=512, visible=False)
+                custom_height = gr.Number(label="自定义高度", value=512, visible=False)
                 output_dimension_source = gr.Radio(
-                    label="Output Dimension Source",
-                    choices=["Foreground", "Background"],
-                    value="Foreground",
+                    label="输出尺寸来源",
+                    choices=["前景", "背景"],
+                    value="前景",
                     visible=True
                 )
+
+                # 更新背景模式处理函数
+                def update_background_mode(mode):
+                    return {
+                        background_color: gr.update(visible=mode == "纯色"),
+                        background_image: gr.update(visible=mode == "图片")
+                    }
 
         def update_background_mode(mode):
             return {
@@ -518,6 +548,12 @@ class Script(scripts.Script):
             background_color = "#000000"
         if not isinstance(edge_color, str) or not edge_color.startswith('#'):
             edge_color = "#FFFFFF"
+
+        # 映射中文选项到原始值
+        geeky_remb = GeekyRemB()
+        background_mode = geeky_remb.background_mode_map.get(background_mode, "transparent")
+        blend_mode = geeky_remb.blend_mode_map.get(blend_mode, "normal")
+        chroma_key = geeky_remb.chroma_key_map.get(chroma_key, "none")
 
         # 生成基本文件名
         basename = f"geeky_rembg_{model}"
