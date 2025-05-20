@@ -409,7 +409,7 @@ def on_ui():
     with gr.Blocks(analytics_enabled=False) as geeky_remb_tab:
         gr.Markdown("# GeekyRemB: 背景移除与图像处理")
 
-        with gr.Accordion("基本设置", open=True):
+        with gr.Accordion("基本设置", open=False):
             with gr.Row():
                 with gr.Column(scale=1):
                     with gr.Group():
