@@ -306,7 +306,7 @@ class GeekyRemB:
         aspect_ratio = self.parse_aspect_ratio(foreground_aspect_ratio)
         new_width, new_height = self.calculate_new_dimensions(orig_width, orig_height, foreground_scale, aspect_ratio)
 
-        fg_image = pil_image.resize((new_width, new_height), Image.LANCZOS)
+        fg_image = removed_bg.resize((new_width, new_height), Image.LANCZOS)
         fg_mask = Image.fromarray(final_mask).resize((new_width, new_height), Image.LANCZOS)
 
         if background_mode == "transparent":
